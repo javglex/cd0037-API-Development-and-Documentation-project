@@ -13,6 +13,16 @@ def null_or_blank(stringCheck):
         return True
     return False
 
+def null_or_zero(intCheck):
+    if intCheck is None or intCheck == 0:
+        return True
+    return False
+
+def null_or_empty(arrayCheck):
+    if arrayCheck is None or len(arrayCheck) == 0:
+        return True
+    return False
+
 def create_app(test_config=None):
     # create and configure the app
     app = Flask(__name__)
@@ -48,7 +58,6 @@ def create_app(test_config=None):
     @app.route("/questions", methods=["GET"])
     def retrieve_questions():
         page = request.args.get("page", 1, type=int)
-        print("page requested:" + str(page))
         start = (page - 1) * QUESTIONS_PER_PAGE
         end = start + QUESTIONS_PER_PAGE
 
@@ -56,7 +65,7 @@ def create_app(test_config=None):
         questionsFormatted  = [question.format() for question in questions]          # format questions so that we can jsonfy it
         paginatedQuestions = questionsFormatted[start:end]          # only return paginated result
         
-        if paginatedQuestions is None or len(paginatedQuestions) == 0:
+        if null_or_empty(paginatedQuestions):
             abort(404)
 
         categories = Category.query.all()           # get list of categories
@@ -79,6 +88,7 @@ def create_app(test_config=None):
 
             if question is None:
                 abort(404)
+
             question.delete()
             questionsCount = Question.query.count()
 
@@ -101,6 +111,7 @@ def create_app(test_config=None):
         category = body.get("category", None)
         difficulty = body.get("difficulty", None)
 
+        # if any of our parameters are missing, abort
         if null_or_blank(question_text) or null_or_blank(answer_text) or null_or_blank(category) or null_or_blank(difficulty):
             print("missing request argument")
             abort(400)
@@ -128,9 +139,9 @@ def create_app(test_config=None):
         print("search: "+search_term)
         query = Question.query.filter(Question.question.ilike('%' + search_term + '%'))
 
-        questionsFormatted = [question.format() for question in query]          # format questions so that we can jsonfy it
+        questionsFormatted = [question.format() for question in query] # format questions so that we can jsonfy it
 
-        if len(questionsFormatted) == 0:
+        if null_or_empty(questionsFormatted):
             abort(404) #questions not found
 
         response = {
@@ -145,31 +156,50 @@ def create_app(test_config=None):
     def retrieve_questions_by_category(category_id):
         if category_id is None:
             abort(400)
-        print("category: " + str(category_id))
-        query = Question.query.filter(Question.category==str(category_id))
-        questions = [question.format() for question in query]
-        if questions is None or len(questions) == 0:
+
+        questionsQuery = Question.query.filter(Question.category==str(category_id))
+        questionsFormatted = [question.format() for question in questionsQuery]
+
+        if null_or_empty(questionsFormatted):
             abort(404)
             
         response = {
             "success": True,
-            "count": query.count(),
-            "questions": questions
+            "count": questionsQuery.count(),
+            "questions": questionsFormatted
         }
         return jsonify(response)
 
+    @app.route('/quizzes', methods=['POST'])
+    def get_next_question():
+        body = request.get_json()
+        category = body.get('quiz_category', None)
+        previousQuestions = body.get('previous_questions', None)
+        
+        if null_or_zero(category['id']): # zero represents 'all' category
+            questions = Question.query.all()
+        else:
+            questions = Question.query.filter(Question.category == category['id']).all()
+        
+        if len(questions) == 0: # if we have no questions, we somehow provided an invalid category
+            abort(404)
+        
+        # fetch list of all questions in our category, except for questions where id matches a previous question
+        availableQuestions = [question.format() for question in questions if question.id not in previousQuestions]
 
-    """
-    @TODO:
-    Create a POST endpoint to get questions to play the quiz.
-    This endpoint should take category and previous question parameters
-    and return a random questions within the given category,
-    if provided, and that is not one of the previous questions.
+        if null_or_empty(availableQuestions): # if no questions remain, it means we're done
+            return jsonify({
+                'success': True,
+                'question': None
+            })
 
-    TEST: In the "Play" tab, after a user selects "All" or a category,
-    one question at a time is displayed, the user is allowed to answer
-    and shown whether they were correct or not.
-    """
+        question = random.choice(availableQuestions) #pick a random question to return
+
+        return jsonify({
+            'success': True,
+            'question': question
+        })
+
 
 
     @app.errorhandler(404)
@@ -189,5 +219,6 @@ def create_app(test_config=None):
     @app.errorhandler(400)
     def bad_request(error):
         return jsonify({"success": False, "error": 400, "message": "bad request"}), 400
+        
     return app
 
