@@ -20,6 +20,7 @@ class TriviaTestCase(unittest.TestCase):
 
         self.new_question = {"answer": "Stephen King", "question": "Which Author wrote The Shining?", "category": 3, "difficulty": 3}
         self.new_question_invalid = {"answer": None, "question": "??", "category": 5}
+        self.quiz = {"previous_questions":[2,4], "quiz_category": {"id":5, "type":"Entertainment"}}
 
         # binds the app to the current context
         with self.app.app_context():
@@ -144,6 +145,20 @@ class TriviaTestCase(unittest.TestCase):
         self.assertEqual(res.status_code, 404)
         self.assertEqual(data["success"], False)
 
+    """Start Quiz Tests"""
+
+    def test_start_quiz_success(self):
+        res = self.client().post("/quizzes", json=self.quiz) # we start a new quiz with previous questions answered (id 2 & 4)
+        data = json.loads(res.data)
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(data["success"], True)
+        self.assertEqual(data["question"]['id'], 6)
+
+    def test_start_quiz_fail(self):
+        res = self.client().post("/quizzes", json=None) # provide an invalid quiz
+        data = json.loads(res.data)
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(data["success"], False)
 
 # Make the tests conveniently executable
 if __name__ == "__main__":
